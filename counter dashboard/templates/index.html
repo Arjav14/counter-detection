@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Printing Press Counter Reader Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .workflow-steps {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .step {
+            flex: 1;
+            text-align: center;
+            position: relative;
+            padding: 10px;
+        }
+
+        .step:not(:last-child):after {
+            content: '→';
+            position: absolute;
+            right: -10px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 24px;
+            color: #667eea;
+        }
+
+        .step-number {
+            width: 30px;
+            height: 30px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .step.active .step-number {
+            background: #48bb78;
+            box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.3);
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+
+        .camera-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            height: 400px; /* Fixed height */
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            cursor: default;
+        }
+
+        .video-container img {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            pointer-events: none; /* Images don't capture mouse events */
+        }
+
+        #videoFeed {
+            display: block;
+            z-index: 1;
+        }
+
+        #capturedImage {
+            display: none;
+            z-index: 2;
+        }
+
+        #selectionOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            cursor: crosshair;
+            display: none;
+        }
+
+        #roiCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        .mode-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 30;
+        }
+
+        .mode-live {
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+        }
+
+        .mode-captured {
+            background: rgba(34, 197, 94, 0.9);
+            color: white;
+        }
+
+        .mode-selecting {
+            background: rgba(102, 126, 234, 0.9);
+            color: white;
+        }
+
+        .controls-panel {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: center;
+            flex: 1;
+        }
+
+        .btn-large {
+            padding: 15px 30px;
+            font-size: 16px;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5a67d8;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #ecc94b;
+            color: white;
+        }
+
+        .btn-info {
+            background: #4299e1;
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-box {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .status-box p {
+            margin: 8px 0;
+            color: #495057;
+        }
+
+        .status-box .label {
+            font-weight: 600;
+            color: #2d3748;
+            display: inline-block;
+            width: 100px;
+        }
+
+        .results-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .current-result {
+            background: #f0fff4;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #48bb78;
+            text-align: center;
+        }
+
+        .result-number {
+            font-size: 64px;
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 10px;
+            font-family: monospace;
+        }
+
+        .history-section {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-left: 4px solid transparent;
+        }
+
+        .history-item:hover {
+            background: #edf2f7;
+        }
+
+        .history-item.has-result {
+            border-left-color: #48bb78;
+        }
+
+        .loading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.95);
+            padding: 30px 50px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            z-index: 1000;
+            text-align: center;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 600;
+            z-index: 1001;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .notification.success {
+            background: #48bb78;
+        }
+
+        .notification.error {
+            background: #f56565;
+        }
+
+        .notification.info {
+            background: #4299e1;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 2000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 900px;
+            margin: 50px auto;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .close {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 28px;
+            cursor: pointer;
+            color: #718096;
+        }
+
+        .keyboard-hint {
+            background: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            color: #495057;
+            margin-top: 15px;
+        }
+
+        .key {
+            background: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #ced4da;
+            font-family: monospace;
+            font-weight: 600;
+            margin: 0 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🖨️ Printing Press Counter Reader</h1>
+            <p>3-step process: Capture → Select → Process</p>
+        </div>
+
+        <!-- Workflow Steps -->
+        <div class="workflow-steps">
+            <div class="step" id="step1">
+                <div class="step-number">1</div>
+                <div class="step-title">📸 Capture</div>
+            </div>
+            <div class="step" id="step2">
+                <div class="step-number">2</div>
+                <div class="step-title">✂️ Select</div>
+            </div>
+            <div class="step" id="step3">
+                <div class="step-number">3</div>
+                <div class="step-title">🔍 Process</div>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            <!-- Camera Section -->
+            <div class="camera-section">
+                <div class="video-container">
+                    <!-- Live feed -->
+                    <img id="videoFeed" src="{{ url_for('video_feed') }}" alt="Live Feed">
+                    
+                    <!-- Captured image -->
+                    <img id="capturedImage" src="" alt="Captured Frame">
+                    
+                    <!-- Selection overlay (captures mouse events) -->
+                    <div id="selectionOverlay"></div>
+                    
+                    <!-- ROI canvas (draws the box) -->
+                    <canvas id="roiCanvas"></canvas>
+                    
+                    <!-- Mode indicator -->
+                    <div id="modeIndicator" class="mode-indicator mode-live">🔴 LIVE</div>
+                </div>
+
+                <div class="controls-panel">
+                    <!-- Main buttons -->
+                    <div class="button-group">
+                        <button class="btn btn-danger btn-large" onclick="captureImage()" id="captureBtn">
+                            📸 CAPTURE FRAME
+                        </button>
+                        <button class="btn btn-warning" onclick="resetToLive()" id="resetBtn" style="display: none;">
+                            🔄 BACK TO LIVE
+                        </button>
+                    </div>
+
+                    <!-- Selection buttons -->
+                    <div id="selectionButtons" style="display: none;">
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="startSelection()" id="selectBtn">
+                                ✂️ DRAW BOX
+                            </button>
+                            <button class="btn btn-info" onclick="useFullImage()" id="fullImageBtn">
+                                🌅 USE FULL IMAGE
+                            </button>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn btn-warning" onclick="clearSelection()" id="clearBtn" style="display: none;">
+                                🗑️ CLEAR BOX
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Process button -->
+                    <div id="processButton" style="display: none;">
+                        <div class="button-group">
+                            <button class="btn btn-success btn-large" onclick="processImage()" id="processBtn">
+                                🔍 READ NUMBERS
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Status -->
+                    <div class="status-box">
+                        <p><span class="label">Step:</span> <span id="stepStatus">1. Ready</span></p>
+                        <p><span class="label">Mode:</span> <span id="modeStatus">Live</span></p>
+                        <p><span class="label">Selection:</span> <span id="selectionStatus">None</span></p>
+                    </div>
+
+                    <div class="keyboard-hint">
+                        <span class="key">ESC</span> Cancel drawing
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="results-panel">
+                <h2>📊 Result</h2>
+                <div class="current-result" id="currentResult">
+                    <div class="result-number">---</div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <h3>📜 History</h3>
+                    <button class="btn btn-danger" onclick="clearHistory()" style="padding: 8px 15px; width: auto;">Clear</button>
+                </div>
+                <div class="history-section" id="historyList"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+        <p>Processing...</p>
+    </div>
+
+    <!-- Notification -->
+    <div class="notification" id="notification"></div>
+
+    <!-- Preview Modal -->
+    <div class="modal" id="previewModal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h3>📸 Preview</h3>
+            <img id="modalImage" style="max-width: 100%;" src="">
+            <div id="modalDetails"></div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        const state = {
+            mode: 'live',           // 'live', 'captured', 'selecting'
+            capturedImageUrl: null,
+            roi: null,
+            useFullImage: false,
+            history: [],
+            imgWidth: 0,
+            imgHeight: 0
+        };
+
+        // DOM elements
+        const videoFeed = document.getElementById('videoFeed');
+        const capturedImage = document.getElementById('capturedImage');
+        const selectionOverlay = document.getElementById('selectionOverlay');
+        const roiCanvas = document.getElementById('roiCanvas');
+        const ctx = roiCanvas.getContext('2d');
+        const modeIndicator = document.getElementById('modeIndicator');
+
+        // Selection variables
+        let isDrawing = false;
+        let startX = 0, startY = 0;
+        let currentX = 0, currentY = 0;
+
+        // Update UI
+        function updateUI() {
+            // Update step indicators
+            document.getElementById('step1').classList.add('completed');
+            
+            if (state.mode === 'live') {
+                // Live mode
+                videoFeed.style.display = 'block';
+                capturedImage.style.display = 'none';
+                selectionOverlay.style.display = 'none';
+                modeIndicator.className = 'mode-indicator mode-live';
+                modeIndicator.textContent = '🔴 LIVE';
+                
+                document.getElementById('stepStatus').textContent = '1. Ready to capture';
+                document.getElementById('modeStatus').textContent = 'Live feed';
+                document.getElementById('selectionStatus').textContent = 'None';
+                document.getElementById('selectionButtons').style.display = 'none';
+                document.getElementById('processButton').style.display = 'none';
+                document.getElementById('resetBtn').style.display = 'none';
+                document.getElementById('captureBtn').style.display = 'block';
+                
+                document.getElementById('step2').classList.remove('active');
+                document.getElementById('step3').classList.remove('active');
+                
+                ctx.clearRect(0, 0, roiCanvas.width, roiCanvas.height);
+                
+            } else if (state.mode === 'captured') {
+                // Captured mode
+                videoFeed.style.display = 'none';
+                capturedImage.style.display = 'block';
+                selectionOverlay.style.display = 'none';
+                modeIndicator.className = 'mode-indicator mode-captured';
+                modeIndicator.textContent = '✅ CAPTURED';
+                
+                document.getElementById('stepStatus').textContent = '2. Select area';
+                document.getElementById('modeStatus').textContent = 'Image captured';
+                document.getElementById('selectionButtons').style.display = 'block';
+                document.getElementById('resetBtn').style.display = 'block';
+                document.getElementById('captureBtn').style.display = 'none';
+                
+                document.getElementById('step2').classList.add('active');
+                
+                if (state.roi) {
+                    document.getElementById('selectionStatus').textContent = `Box selected`;
+                    document.getElementById('processButton').style.display = 'block';
+                    document.getElementById('clearBtn').style.display = 'block';
+                    document.getElementById('step3').classList.add('active');
+                    drawROI();
+                } else if (state.useFullImage) {
+                    document.getElementById('selectionStatus').textContent = 'Full image';
+                    document.getElementById('processButton').style.display = 'block';
+                    document.getElementById('clearBtn').style.display = 'none';
+                    document.getElementById('step3').classList.add('active');
+                    ctx.clearRect(0, 0, roiCanvas.width, roiCanvas.height);
+                } else {
+                    document.getElementById('selectionStatus').textContent = 'None';
+                    document.getElementById('processButton').style.display = 'none';
+                    document.getElementById('clearBtn').style.display = 'none';
+                    document.getElementById('step3').classList.remove('active');
+                    ctx.clearRect(0, 0, roiCanvas.width, roiCanvas.height);
+                }
+                
+            } else if (state.mode === 'selecting') {
+                // Selecting mode
+                modeIndicator.className = 'mode-indicator mode-selecting';
+                modeIndicator.textContent = '✂️ SELECTING';
+                document.getElementById('selectionStatus').textContent = 'Drawing box...';
+            }
+        }
+
+        // Draw ROI
+        function drawROI() {
+            if (!state.roi || !state.imgWidth) return;
+            
+            ctx.clearRect(0, 0, roiCanvas.width, roiCanvas.height);
+            
+            // Calculate scaling
+            const scaleX = roiCanvas.width / state.imgWidth;
+            const scaleY = roiCanvas.height / state.imgHeight;
+            
+            const x = state.roi.x * scaleX;
+            const y = state.roi.y * scaleY;
+            const w = state.roi.width * scaleX;
+            const h = state.roi.height * scaleY;
+            
+            // Draw box
+            ctx.fillStyle = 'rgba(72, 187, 120, 0.2)';
+            ctx.fillRect(x, y, w, h);
+            
+            ctx.strokeStyle = '#48bb78';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, w, h);
+            
+            // Draw handles
+            ctx.fillStyle = '#48bb78';
+            ctx.fillRect(x - 4, y - 4, 8, 8);
+            ctx.fillRect(x + w - 4, y - 4, 8, 8);
+            ctx.fillRect(x - 4, y + h - 4, 8, 8);
+            ctx.fillRect(x + w - 4, y + h - 4, 8, 8);
+        }
+
+        // Capture image
+        async function captureImage() {
+            document.getElementById('loading').classList.add('active');
+            
+            try {
+                const response = await fetch('/capture', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    capturedImage.src = data.image_path + '?t=' + Date.now();
+                    
+                    capturedImage.onload = function() {
+                        state.imgWidth = capturedImage.naturalWidth;
+                        state.imgHeight = capturedImage.naturalHeight;
+                        state.mode = 'captured';
+                        state.roi = null;
+                        state.useFullImage = false;
+                        updateUI();
+                        document.getElementById('loading').classList.remove('active');
+                        showNotification('Image captured!', 'success');
+                    };
+                }
+            } catch (error) {
+                document.getElementById('loading').classList.remove('active');
+                showNotification('Error capturing image', 'error');
+            }
+        }
+
+        // Start selection
+        function startSelection() {
+            state.mode = 'selecting';
+            selectionOverlay.style.display = 'block';
+            updateUI();
+            showNotification('Click and drag to draw a box', 'info');
+        }
+
+        // Selection overlay mouse events
+        selectionOverlay.addEventListener('mousedown', (e) => {
+            if (state.mode !== 'selecting') return;
+            
+            e.preventDefault(); // Prevent page movement
+            
+            const rect = selectionOverlay.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            isDrawing = true;
+        });
+
+        selectionOverlay.addEventListener('mousemove', (e) => {
+            if (!isDrawing || state.mode !== 'selecting') return;
+            
+            e.preventDefault();
+            
+            const rect = selectionOverlay.getBoundingClientRect();
+            currentX = e.clientX - rect.left;
+            currentY = e.clientY - rect.top;
+            
+            // Draw preview
+            ctx.clearRect(0, 0, roiCanvas.width, roiCanvas.height);
+            
+            const x = Math.min(startX, currentX);
+            const y = Math.min(startY, currentY);
+            const w = Math.abs(currentX - startX);
+            const h = Math.abs(currentY - startY);
+            
+            ctx.fillStyle = 'rgba(102, 126, 234, 0.2)';
+            ctx.fillRect(x, y, w, h);
+            
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+        });
+
+        selectionOverlay.addEventListener('mouseup', (e) => {
+            if (!isDrawing || state.mode !== 'selecting') return;
+            
+            e.preventDefault();
+            
+            const rect = selectionOverlay.getBoundingClientRect();
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+            
+            // Calculate box
+            const x = Math.min(startX, endX);
+            const y = Math.min(startY, endY);
+            const w = Math.abs(endX - startX);
+            const h = Math.abs(endY - startY);
+            
+            if (w > 20 && h > 20) {
+                // Convert to image coordinates
+                const scaleX = state.imgWidth / roiCanvas.width;
+                const scaleY = state.imgHeight / roiCanvas.height;
+                
+                state.roi = {
+                    x: Math.round(x * scaleX),
+                    y: Math.round(y * scaleY),
+                    width: Math.round(w * scaleX),
+                    height: Math.round(h * scaleY)
+                };
+                
+                // Save to server
+                fetch('/save_roi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(state.roi)
+                });
+                
+                showNotification('Box drawn! Click READ NUMBERS', 'success');
+            } else {
+                showNotification('Box too small', 'error');
+            }
+            
+            // Reset
+            isDrawing = false;
+            state.mode = 'captured';
+            selectionOverlay.style.display = 'none';
+            updateUI();
+        });
+
+        // Cancel with ESC
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && state.mode === 'selecting') {
+                isDrawing = false;
+                state.mode = 'captured';
+                selectionOverlay.style.display = 'none';
+                ctx.clearRect(0, 0, roiCanvas.width, roiCanvas.height);
+                updateUI();
+                showNotification('Drawing cancelled', 'info');
+            }
+        });
+
+        // Use full image
+        function useFullImage() {
+            state.useFullImage = true;
+            state.roi = null;
+            updateUI();
+            showNotification('Using full image', 'info');
+        }
+
+        // Clear selection
+        function clearSelection() {
+            state.roi = null;
+            state.useFullImage = false;
+            updateUI();
+            showNotification('Selection cleared', 'info');
+        }
+
+        // Process image
+        async function processImage() {
+            document.getElementById('loading').classList.add('active');
+            
+            try {
+                const response = await fetch('/process_full_image', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        use_full_image: state.useFullImage || !state.roi 
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    displayResult(data);
+                    addToHistory(data);
+                    showNotification('Numbers read!', 'success');
+                }
+            } catch (error) {
+                showNotification('Error processing', 'error');
+            } finally {
+                document.getElementById('loading').classList.remove('active');
+            }
+        }
+
+        // Display result
+        function displayResult(data) {
+            const resultDiv = document.getElementById('currentResult');
+            
+            if (data.results && data.results.length > 0) {
+                const best = data.results[0];
+                resultDiv.innerHTML = `
+                    <div class="result-number">${best.text}</div>
+                    <div>Confidence: ${(best.confidence * 100).toFixed(1)}%</div>
+                `;
+            } else {
+                resultDiv.innerHTML = `<div class="result-number">❌</div><div>No numbers</div>`;
+            }
+        }
+
+        // Add to history
+        function addToHistory(data) {
+            state.history.unshift(data);
+            renderHistory();
+        }
+
+        // Render history
+        function renderHistory() {
+            const historyList = document.getElementById('historyList');
+            
+            if (state.history.length === 0) {
+                historyList.innerHTML = '<p style="text-align: center; color: #718096;">No readings</p>';
+                return;
+            }
+            
+            historyList.innerHTML = '';
+            
+            state.history.forEach((item) => {
+                const hasResult = item.results && item.results.length > 0;
+                const best = hasResult ? item.results[0] : null;
+                
+                const div = document.createElement('div');
+                div.className = `history-item ${hasResult ? 'has-result' : ''}`;
+                div.onclick = () => showPreview(item);
+                div.innerHTML = `
+                    <div style="font-size: 12px; color: #718096;">${item.timestamp}</div>
+                    <div style="font-size: 18px; font-weight: bold;">${hasResult ? best.text : 'No detection'}</div>
+                `;
+                historyList.appendChild(div);
+            });
+        }
+
+        // Reset to live
+        function resetToLive() {
+            state.mode = 'live';
+            state.roi = null;
+            state.useFullImage = false;
+            isDrawing = false;
+            selectionOverlay.style.display = 'none';
+            ctx.clearRect(0, 0, roiCanvas.width, roiCanvas.height);
+            updateUI();
+        }
+
+        // Clear history
+        async function clearHistory() {
+            await fetch('/clear_history', { method: 'POST' });
+            state.history = [];
+            renderHistory();
+            showNotification('History cleared', 'success');
+        }
+
+        // Show preview
+        function showPreview(item) {
+            const modal = document.getElementById('previewModal');
+            const modalImage = document.getElementById('modalImage');
+            const modalDetails = document.getElementById('modalDetails');
+            
+            modalImage.src = item.image_path;
+            modalDetails.innerHTML = '<h4>Results:</h4>' + 
+                (item.results ? item.results.map(r => 
+                    `<p>${r.text} (${(r.confidence * 100).toFixed(1)}%)</p>`
+                ).join('') : '<p>No results</p>');
+            
+            modal.style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('previewModal').style.display = 'none';
+        }
+
+        function showNotification(message, type) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.className = `notification ${type}`;
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+
+        // Load history
+        window.addEventListener('load', async () => {
+            const response = await fetch('/get_history');
+            const data = await response.json();
+            state.history = data.history;
+            renderHistory();
+            updateUI();
+            
+            // Set canvas size
+            const container = document.querySelector('.video-container');
+            roiCanvas.width = container.clientWidth;
+            roiCanvas.height = container.clientHeight;
+        });
+
+        window.addEventListener('resize', () => {
+            const container = document.querySelector('.video-container');
+            roiCanvas.width = container.clientWidth;
+            roiCanvas.height = container.clientHeight;
+            if (state.roi) drawROI();
+        });
+    </script>
+</body>
+</html>
